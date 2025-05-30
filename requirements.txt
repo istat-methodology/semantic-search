@@ -1,0 +1,6 @@
+torch
+sentence-transformers
+qdrant_client
+openai
+python-dotenv
+tqdm
