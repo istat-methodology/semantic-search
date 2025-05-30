@@ -12,7 +12,7 @@
 To install the `semantic_search` package, you can use pip:
 
 ```bash
-pip install git+git://github.com/istat-methodology/semantic-search.git
+pip install git+https://github.com/istat-methodology/semantic-search.git
 ```
 
 ## Usage
