@@ -1,8 +1,8 @@
 import torch
 import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer
-from semantic_search.data import Corpus, Document, RetrievedPoint, SearchOutput
-from typing import List, Optional, Any
+from semantic_search.data import Corpus, RetrievedPoint, SearchOutput
+from typing import List, Optional
 
 
 class LocalKnowledgeBase:
