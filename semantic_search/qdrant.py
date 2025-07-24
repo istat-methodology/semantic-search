@@ -18,7 +18,7 @@ class EmbeddingModel:
     Args:
     model_id (str): Name of the embedding model (e.g., 'all-MiniLM-L6-v2', 'text-embedding-3-large').
     model_type (str): Either 'huggingface' or 'openai'.
-    vector_size (Optional[int]): Required for OpenAI models. Optional for HuggingFace models (auto-inferred).
+    vector_size (Optional[int]): Required for OpenAI models (leave 'None' for text-embedding-ada-002). Optional for HuggingFace models (auto-inferred).
     openai_api_key (Optional[str]): OpenAI API key (default: from `.env` via `OPENAI_API_KEY`). Not needed for HuggingFace models.
     """
 
@@ -44,28 +44,59 @@ class EmbeddingModel:
             model_embed_dim = self.model.get_sentence_embedding_dimension()
             assert (
                 self.vector_size == model_embed_dim or self.vector_size is None
-            ), f"The vector size of the model ({model_embed_dim}) does not match the provided vector size ({self.vector_size})."
+            ), f"The dimension of the model ({model_embed_dim}) does not match the provided 'vector_size' ({self.vector_size})."
             self.vector_size = model_embed_dim
 
         elif self.model_type == "openai":
             self.model = OpenAI(api_key=self.openai_api_key)
-            self.model_type = "openai"
-            assert (
-                self.vector_size is not None
-            ), "When using OpenAI embeddings, 'vector_size' must be specified."
+            self._assert_dimensions_openai(self.model_id, self.vector_size)
 
-    def encode(self, texts: List[str]):
-        r"""Returns a list of embedding vectors for the given text inputs."""
+    def encode(self, texts: List[str], batch_size: Optional[int] = 32) -> List[List[float]]:
+        r"""Returns a list of embedding vectors for the given text inputs.
+        
+        Args:
+        texts (List[str]): List of text inputs to encode.
+        batch_size (Optional[int]): Controls batch size for embedding generation. Defaults to 32.
+        """
         if self.model_type == "huggingface":
-            embeddings = self.model.encode(texts, show_progress_bar=True)
+            embeddings = self.model.encode(texts, batch_size=batch_size, show_progress_bar=True)
+        
         elif self.model_type == "openai":
-            embeddings = []
-            for text in tqdm(texts, desc="Creating embeddings..."):
-                response = self.model.embeddings.create(
-                    input=text, model=self.model_id, dimensions=self.vector_size
-                )
-                embeddings.append(response.data[0].embedding)
+            if self.model_id == "text-embedding-ada-002":
+                embeddings = self._openai_batch_encode(texts, dimensions=None, batch_size=batch_size)
+            else:
+                embeddings = self._openai_batch_encode(texts, dimensions=self.vector_size, batch_size=batch_size)
+
         return embeddings
+
+    def _openai_batch_encode(self, texts: List[str], dimensions: int, batch_size: int) -> List[List[str]]:
+        embeddings = []
+        for i in tqdm(range(0, len(texts), batch_size), desc="Creating embeddings..."):
+            batch = texts[i : i + batch_size]
+            response = self.model.embeddings.create(
+                    input=batch,
+                    model=self.model_id,
+                    dimensions=dimensions
+                )
+            embeddings.extend([point.embedding for point in response.data])
+        return embeddings
+    
+    def _assert_dimensions_openai(self, model_id: str, vector_size: int):
+        if model_id == "text-embedding-ada-002":
+            if vector_size not in (None, 1536):
+                print("Warning: 'text-embedding-ada-002' model has a fixed dimension (1536), 'vector_size' will be set to 1536 when creating the database.")
+            self.vector_size = 1536
+
+        else:
+            if model_id == "text-embedding-3-small":
+                assert (type(vector_size) == int) and (vector_size % 8 == 0) and (8 <= vector_size <= 1536), "'vector_size' must be a multiple of 8 and in the range [8, 1536] for text-embedding-3-small."
+            
+            elif model_id == "text-embedding-3-large":
+                assert (type(vector_size) == int) and (vector_size % 8 == 0) and (8 <= vector_size <= 3072), "'vector_size' must be a multiple of 8 and in the range [8, 3072] for text-embedding-3-large."
+            
+            else:
+                raise ValueError(f"Unsupported model_id '{model_id}' for OpenAI embeddings.")
+
 
 
 class CollectionMananger:
@@ -93,6 +124,8 @@ class CollectionMananger:
         model_type: str,
         vector_size: Optional[int] = None,
         overwrite: Optional[bool] = False,
+        upload_source_text: Optional[bool] = True,
+        embed_batch_size: Optional[int] = 32,
         upload_batch_size: Optional[int] = 32,
     ):
         r"""Creates a Qdrant collection and uploads embedded documents using using cosine similarity as a distance metric.
@@ -104,37 +137,41 @@ class CollectionMananger:
         model_type (str): Either 'huggingface' or 'openai'.
         vector_size (Optional[int]): Required for OpenAI models. Optional for HuggingFace models (auto-inferred).
         overwrite (Optional[bool]): If `True`, deletes existing collection with the same name before creation. Defaults to `False`.
+        upload_source_text (Optional[bool]): If `True`, adds the original text to the document metadata. Defaults to `True`.
+        embed_batch_size (Optional[int]): Controls batch size for embedding generation. Defaults to 256.
         upload_batch_size (Optional[int]): Controls batch upload size to Qdrant. Defaults to 32.
         """
         if self.client.collection_exists(name):
             if overwrite:
                 self.client.delete_collection(name)
             else:
-                print(
-                    f"A collection with name {name} already exists. If you want to overwrite it, set 'overwrite=True'."
-                )
+                print(f"Collection '{name}' exists. To overwrite, set 'overwrite=True'.")
                 return
 
-        ids = [doc.id for doc in corpus.documents]
         texts = [doc.content for doc in corpus.documents]
-        metadata = [doc.metadata for doc in corpus.documents]
-
-        payloads = [{"text": t, "metadata": m} for t, m in zip(texts, metadata)]
-
-        model = EmbeddingModel(
+        embedding_model = EmbeddingModel(
             model_id=model_id, model_type=model_type, vector_size=vector_size
         )
-        vectors_config = VectorParams(size=model.vector_size, distance=Distance.COSINE)
-        self.client.create_collection(
-            collection_name=name, vectors_config=vectors_config
-        )
-        embeddings = model.encode(texts)
+        embeddings = embedding_model.encode(texts, batch_size=embed_batch_size)
 
         points = []
+        for doc, embedding in zip(corpus.documents, embeddings):
+            if upload_source_text:
+                doc = doc.copy()
+                doc.metadata["source_text"] = doc.content
 
-        for i, embedding, payload in zip(ids, embeddings, payloads):
-            point = PointStruct(id=i, vector=embedding, payload=payload)
+            point = PointStruct(
+                id=doc.id,
+                vector=embedding,
+                payload=doc.metadata
+            )
             points.append(point)
+        
+        vectors_config = VectorParams(
+            size=embedding_model.vector_size,
+            distance=Distance.COSINE
+        )
+        self.client.create_collection(collection_name=name, vectors_config=vectors_config)
 
         for i in tqdm(
             range(0, len(points), upload_batch_size),
@@ -154,6 +191,29 @@ class CollectionMananger:
             print(f"Succesfully removed collection: {name}!")
         else:
             print(f"No collection named '{name}' exists to remove.")
+    
+    def get_collection_info(self, name: str) -> dict:
+        info = self.client.get_collection(collection_name=name)
+        vp = info.config.params.vectors
+        return {
+            "name": name,
+            "status": info.status.value,
+            "vector_size": vp.size,
+            "distance": vp.distance.value,
+            "points_count": info.points_count,
+        }
+    
+    def list_collections(self)-> list[str]:
+        """Returns a list of collection names."""
+        return[ c.name for c in self.client.get_collections().collections ]
+    
+    def list_collections_with_info(self) -> list[dict]:
+        """Returns a list of dicts, one per collection, containing status, vector size, distance, and points count."""
+        info = []
+        for name in self.list_collections():
+            info.append(self.get_collection_info(name))
+        return info
+ 
 
 
 class SemanticSeeker:
@@ -217,8 +277,7 @@ class SemanticSeeker:
             results.append(
                 RetrievedPoint(
                     id=point.id,
-                    text=point.payload["text"],
-                    metadata=point.payload["metadata"],
+                    metadata=point.payload,
                     score=point.score,
                 )
             )

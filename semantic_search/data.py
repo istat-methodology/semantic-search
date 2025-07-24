@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import numpy as np
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
@@ -12,9 +13,17 @@ class Document:
     metadata (Optional[Dict[str, Any]]): Optional dictionary with extra info.
     """
 
-    id: Any
+    id: int
     content: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = field(default_factory=dict)
+
+    def copy(self):
+        r"""Returns a copy of the document."""
+        return Document(
+            id=self.id,
+            content=self.content,
+            metadata=self.metadata.copy(),
+        )
 
 
 @dataclass
@@ -35,7 +44,6 @@ class RetrievedPoint:
     r"""A search result with associated similarity score"""
 
     id: Any
-    text: str
     metadata: Dict[str, Any]
     score: float
 
@@ -54,19 +62,21 @@ class SearchOutput:
 
 
 def build_corpus(
-    texts: List[str], ids: List[Any], metadata: Optional[List[Dict[str, Any]]] = None
+    texts: List[str], ids: List[int], metadata: Optional[List[Dict[str, Any]]] = None
 ) -> Corpus:
     r"""Utility to build a `Corpus` from parallel lists.
 
     Args:
     texts (List[str]): List of document strings.
-    ids (List[Any]): List of unique document IDs.
+    ids (List[int]): List of unique integer document IDs.
     metadata (Optional[List[Dict[str, Any]]]): Optional list of metadata dictionaries. Defaults to None.
     """
     if metadata is None:
         metadata = [{}] * len(texts)
-    assert (
-        len(texts) == len(ids) == len(metadata)
-    ), "texts, ids, and metadata must be the same length."
+
+    assert len(np.unique(ids)) == len(ids), "IDs must be unique."
+    assert all(isinstance(i, int) for i in ids), "All IDs must be integers."
+    assert (len(texts) == len(ids) == len(metadata)), "texts, ids, and metadata must be the same length."
+
     docs = [Document(i, text, meta) for i, text, meta in zip(ids, texts, metadata)]
     return Corpus(docs)
