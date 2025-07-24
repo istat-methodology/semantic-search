@@ -51,8 +51,6 @@ base = LocalKnowledgeBase(
 ```
 We could also specify the `batch_size` argument to control how many texts are processed at once, which can be useful for large datasets, especially if you have a CUDA-compatible GPU. The default value is 32.
 
-> To add new documents to an existing knowledge base, we can use the `.add()` method, passing the new documents as a `Corpus` object and specifying whether we want to overwrite existing ones with the same ID. To remove documents from an existing knowledge base, we can use the `.remove()` method, simply specifying the IDs of the documents we want to remove.
-
 #### Semantic Search
 Now we can perform semantic search using the `.search()` method of the `LocalKnowledgeBase` object. This method takes a query string (or list of strings) and returns the most relevant texts from the corpus based on their embeddings. The `top_k` argument specifies how many results to return.
 
@@ -78,7 +76,6 @@ In practice, to access the top result for a single query, we can do:
 top_result = results[0][0]
 
 score = top_result.score
-text = top_result.text
 idx = top_result.id
 metadata = top_result.metadata
 ```
@@ -89,7 +86,6 @@ To access, for instance, the second result of the third query in the case of mul
 top_result = results[2][1]
 
 score = top_result.score
-text = top_result.text
 idx = top_result.id
 metadata = top_result.metadata
 ```
@@ -162,7 +158,6 @@ To extract the top result, we can do:
 top_result = results[0]
 
 score = top_result.score
-text = top_result.text
 idx = top_result.id
 metadata = top_result.metadata
 ```

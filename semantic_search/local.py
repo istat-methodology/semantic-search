@@ -1,8 +1,8 @@
 import torch
 import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer
-from semantic_search.data import Corpus, RetrievedPoint, SearchOutput
-from typing import List, Optional, Any, Dict
+from semantic_search.data import Corpus, Document, RetrievedPoint, SearchOutput
+from typing import List, Optional, Any
 
 
 class LocalKnowledgeBase:
@@ -14,15 +14,12 @@ class LocalKnowledgeBase:
     batch_size (Optional[int]): Embedding batch size. Defaults to 32.
     """
 
-    def __init__(self, corpus: Corpus, model_id: str, batch_size: Optional[int] = 32):
+    def __init__(self, corpus: Corpus, model_id: str, batch_size: Optional[int] = 32, keep_source_text: Optional[bool] = True):
         self.corpus = corpus
-        self.texts = [doc.content for doc in corpus.documents]
-        self.ids = [doc.id for doc in corpus.documents]
-        self.metadata = [doc.metadata for doc in corpus.documents]
-
         self.model_id = model_id
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.batch_size = batch_size
+        self.keep_source_text = keep_source_text
 
         self.model = SentenceTransformer(model_id, device=self.device)
         self.vector_size = self.model.get_sentence_embedding_dimension()
@@ -34,11 +31,15 @@ class LocalKnowledgeBase:
         Initialize or reset the corpus storage and embeddings.
         """
         self.corpus = corpus
-        self.ids: List[Any] = [doc.id for doc in corpus.documents]
+        self.ids: List[int] = [doc.id for doc in corpus.documents]
         self.texts: List[str] = [doc.content for doc in corpus.documents]
-        self.metadata: List[Dict[str, Any]] = [
-            doc.metadata or {} for doc in corpus.documents
-        ]
+
+        self.metadata = []
+        for doc in corpus.documents:
+            meta = dict(doc.metadata or {})
+            if self.keep_source_text:
+                meta["source_text"] = doc.content
+            self.metadata.append(meta)
 
         self.embeddings = self.model.encode(
             self.texts,
@@ -65,7 +66,6 @@ class LocalKnowledgeBase:
             points.append(
                 RetrievedPoint(
                     id=self.ids[idx_i],
-                    text=self.texts[idx_i],
                     metadata=self.metadata[idx_i],
                     score=sim_i.item(),
                 )
@@ -99,77 +99,3 @@ class LocalKnowledgeBase:
         sims, idxs = sim_matrix.topk(k=top_k, dim=1, largest=True, sorted=True)
 
         return [self._parse_output(i, s) for i, s in zip(idxs, sims)]
-
-    def add(
-        self,
-        new_corpus: Corpus,
-        overwrite: Optional[bool] = False,
-    ) -> None:
-        r"""Add documents from new_corpus to the knowledge base.
-
-        Args:
-        new_corpus (Corpus): Corpus of new documents.
-        overwrite (Optional[bool]): if `True`, replaces existing docs with matching IDs. Embeddings are computed only after filtering. Defaults to `False`.
-        """
-        id_to_index = {doc_id: idx for idx, doc_id in enumerate(self.ids)}
-
-        to_index = []
-        for idx, doc in enumerate(new_corpus.documents):
-            if doc.id in id_to_index:
-                if overwrite:
-                    to_index.append(idx)
-            else:
-                to_index.append(idx)
-
-        if not to_index:
-            return
-
-        if overwrite:
-            remove_ids = [
-                new_corpus.documents[i].id
-                for i in to_index
-                if new_corpus.documents[i].id in id_to_index
-            ]
-            self.remove(remove_ids)
-
-        new_texts = [new_corpus.documents[i].content for i in to_index]
-        new_ids = [new_corpus.documents[i].id for i in to_index]
-        new_metadata = [new_corpus.documents[i].metadata or {} for i in to_index]
-
-        new_embeddings = self.model.encode(
-            new_texts,
-            batch_size=self.batch_size,
-            show_progress_bar=True,
-            convert_to_tensor=True,
-        )
-
-        self.ids.extend(new_ids)
-        self.texts.extend(new_texts)
-        self.metadata.extend(new_metadata)
-        self.embeddings = torch.cat([self.embeddings, new_embeddings], dim=0)
-
-    def remove(self, remove_ids: List[Any]) -> None:
-        r"""Remove documents and embeddings by ID.
-
-        Args
-        ids (List[Any]): List of document IDs to delete.
-        """
-        if not remove_ids:
-            return
-
-        keep_mask = [doc_id not in remove_ids for doc_id in self.ids]
-
-        self.ids = [doc_id for doc_id, keep in zip(self.ids, keep_mask) if keep]
-        self.texts = [text for text, keep in zip(self.texts, keep_mask) if keep]
-        self.metadata = [meta for meta, keep in zip(self.metadata, keep_mask) if keep]
-
-        mask_tensor = torch.tensor(
-            keep_mask, dtype=torch.bool, device=self.embeddings.device
-        )
-        self.embeddings = self.embeddings[mask_tensor]
-
-        new_docs = [
-            RetrievedPoint(id_, text, meta, 0.0)
-            for id_, text, meta in zip(self.ids, self.texts, self.metadata)
-        ]
-        self.corpus = Corpus(new_docs)
