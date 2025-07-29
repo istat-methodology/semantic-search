@@ -175,3 +175,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+#file nascosti che crea il  MAC
+.DS_Store
