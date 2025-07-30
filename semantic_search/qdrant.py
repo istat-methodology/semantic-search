@@ -3,6 +3,7 @@ from openai import OpenAI
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct
+from qdrant_client.http import models
 from semantic_search.data import Corpus, RetrievedPoint, SearchOutput
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -283,3 +284,36 @@ class SemanticSeeker:
             )
 
         return SearchOutput(results=results)
+    
+    def search_many(self, queries: list[str], top_k: int = 5, batch_size: int = 512) -> list[SearchOutput]:
+        vectors = self.model.encode(queries)
+        if not isinstance(vectors, list):
+            vectors = vectors.tolist()
+
+        all_responses = []                       
+        for i in range(0, len(queries), batch_size):
+            vec_batch = vectors[i : i + batch_size]
+
+            # requests parameters
+            reqs = [ models.QueryRequest(query=v, limit=top_k, with_vector=False, with_payload=True ) for v in vec_batch ]
+
+            resp_batch = self.client.query_batch_points(
+                collection_name=self.name,
+                requests=reqs,
+            )
+            all_responses.extend(resp_batch)   
+
+        # conversione in SearchOutput 
+        outputs: list[SearchOutput] = []
+        for res in all_responses:               
+            retrieved = [
+                RetrievedPoint(
+                    id=p.id,
+                    metadata=p.payload,
+                    score=p.score,
+                )
+                for p in res.points
+            ]
+            outputs.append(SearchOutput(results=retrieved))
+
+        return outputs    
