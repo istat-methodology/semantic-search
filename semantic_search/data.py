@@ -2,6 +2,8 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+import pandas as pd
+
 
 @dataclass
 class Document:
@@ -38,6 +40,51 @@ class Corpus:
     def __getitem__(self, index: int) -> Document:
         return self.documents[index]
 
+    @classmethod
+    def from_dataframe(
+        cls,
+        df: pd.DataFrame,
+        source_text_col: str,                               
+        label_text_col: Optional[str] = None,
+        label_id_col: Optional[str]= None,
+        father_label_id_col : Optional[str] = None,
+        g_father_label_id_col: Optional[str] = None,
+        sep: str = '-'
+           ) -> "Corpus":
+        
+        if df.empty: raise ValueError('DataFrame is empty')
+        
+        # 'source text' è il testo da embeddare, è necessario
+        if source_text_col is None:
+            raise ValueError("The parameter 'source_text_col' is required")
+        if label_text_col is None and label_id_col is None:
+            raise ValueError("The label requires either a code or a text or both")
+
+        # controllo che le colonne pasate esistono nel df ('None' sono accettati con i vincoli di sopra)
+        variables= [ source_text_col, label_text_col, label_id_col, father_label_id_col, g_father_label_id_col ]
+        for v in variables:
+            if v is not None:
+                if v not in df.columns:
+                    raise ValueError(f"{v} not present in dataframe columns")
+
+        # del df prende solo colonne necessarie
+        # testo da embeddare è pulito da eventuali spazi inizio o fine
+        cols_needed = [ c for c in variables if c ]
+
+        # testo da embeddare è pulito da eventuali spazi inizio o fine
+        doc_list: List[Document] = []
+        for idx, row in df[cols_needed].iterrows():
+            content_from_df = str(row[source_text_col]).strip()
+            metadata_from_df= {
+            'label_id':             row.get(label_id_col),
+            'label_text':           row.get(label_text_col),
+            'father_label_id':      row.get(father_label_id_col),
+            'g_father_label_id':    row.get(g_father_label_id_col)
+                 }
+            doc = Document( id= idx, content= content_from_df, metadata= metadata_from_df )
+            doc_list.append(doc)
+
+        return cls(doc_list)
 
 @dataclass
 class RetrievedPoint:
