@@ -2,7 +2,7 @@ import os
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct
+from qdrant_client.http.models import Distance, VectorParams, PointStruct, SearchParams
 from qdrant_client.http import models
 from semantic_search.data import Corpus, RetrievedPoint, SearchOutput
 from tqdm import tqdm
@@ -286,6 +286,7 @@ class SemanticSeeker:
         return SearchOutput(results=results)
     
     def search_many(self, queries: list[str], top_k: int = 5, batch_size: int = 512) -> list[SearchOutput]:
+        
         vectors = self.model.encode(queries)
         if not isinstance(vectors, list):
             vectors = vectors.tolist()
@@ -295,6 +296,9 @@ class SemanticSeeker:
             vec_batch = vectors[i : i + batch_size]
 
             # requests parameters
+            # per maggiore velocità di ricerca 
+            # params = SearchParams(hnsw_ef=32)
+            # with less Payload no time-gain
             reqs = [ models.QueryRequest(query=v, limit=top_k, with_vector=False, with_payload=True ) for v in vec_batch ]
 
             resp_batch = self.client.query_batch_points(
