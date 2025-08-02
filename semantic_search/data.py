@@ -53,8 +53,8 @@ class Corpus:
            ) -> "Corpus":
         
         if df.empty: raise ValueError('DataFrame is empty')
-        print('sta usando il baranch ')
-        
+        print('sta usando il baranch 22222 ')
+
         # 'source text' è il testo da embeddare, è necessario
         if source_text_col is None:
             raise ValueError("The parameter 'source_text_col' is required")
