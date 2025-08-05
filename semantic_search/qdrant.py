@@ -285,6 +285,9 @@ class SemanticSeeker:
 
         return SearchOutput(results=results)
     
+
+
+
     def search_many(self, queries: list[str], top_k: int = 5, batch_size: int = 512) -> list[SearchOutput]:
         
         vectors = self.model.encode(queries)
