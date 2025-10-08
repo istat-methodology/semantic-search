@@ -99,8 +99,8 @@ class EmbeddingModel:
                 raise ValueError(f"Unsupported model_id '{model_id}' for OpenAI embeddings.")
 
 
-
-class CollectionMananger:
+# cambiato il refuso del nome: "CollectionMananger" -> "CollectionManager"
+class CollectionManager:
     r"""Handles the creation and deletion of Qdrant collections.
 
     Args:
