@@ -1,6 +1,8 @@
+import pandas as pd
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from collections import OrderedDict
 
 
 @dataclass
@@ -38,6 +40,35 @@ class Corpus:
     def __getitem__(self, index: int) -> Document:
         return self.documents[index]
 
+    @classmethod
+    def from_pandas(
+        cls,
+        df: pd.DataFrame,
+        source_text_col: str,
+        cols_to_include: Optional[List[str]] = [],
+    ) -> "Corpus":
+        r"""Create a `Corpus` from a pandas DataFrame.
+
+        Args:
+        df (pd.DataFrame): Source pandas dataframe.
+        source_text_col (str): Name of the column containing the text to embed.
+        cols_to_include (Optional[List[str]]): Optional list of columns to include in the metadata.
+        """
+
+        assert len(df) > 0 and not df.empty, "DataFrame is empty."
+
+        cols = list(OrderedDict.fromkeys([source_text_col] + cols_to_include))
+        assert all(col in df.columns for col in cols), "Not all columns were found in DataFrame."
+
+        doc_list: List[Document] = []
+        for idx, row in df[cols].iterrows():
+            source_text = row[source_text_col]
+            meta = {col: row[col] for col in cols_to_include}
+
+            doc_list.append(Document(id=idx, content=source_text, metadata=meta))
+
+        return cls(doc_list)
+
 
 @dataclass
 class RetrievedPoint:
@@ -62,17 +93,21 @@ class SearchOutput:
 
 
 def build_corpus(
-    texts: List[str], ids: List[int], metadata: Optional[List[Dict[str, Any]]] = None
+    texts: List[str],
+    ids: Optional[List[int]] = None,
+    metadata: Optional[List[Dict[str, Any]]] = None,
 ) -> Corpus:
     r"""Utility to build a `Corpus` from parallel lists.
 
     Args:
     texts (List[str]): List of document strings.
-    ids (List[int]): List of unique integer document IDs.
+    ids (Optional[List[int]]): List of unique integer document IDs. Defaults to None (IDs automatically generated).
     metadata (Optional[List[Dict[str, Any]]]): Optional list of metadata dictionaries. Defaults to None.
     """
     if metadata is None:
         metadata = [{}] * len(texts)
+    if ids is None:
+        ids = list(range(len(texts)))
 
     assert len(np.unique(ids)) == len(ids), "IDs must be unique."
     assert all(isinstance(i, int) for i in ids), "All IDs must be integers."
