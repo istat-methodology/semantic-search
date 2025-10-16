@@ -1,3 +1,8 @@
+
+
+#file nascosti che crea il  MAC
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -176,5 +181,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-#file nascosti che crea il  MAC
-.DS_Store
+

@@ -258,45 +258,17 @@ class SemanticSeeker:
             collection_vector_size == self.model.vector_size
         ), f"The vector sizes of collection ({collection_vector_size}) and model ({self.model.vector_size}) do not match!"
 
-    def search(self, query: str, top_k: Optional[int] = 10) -> SearchOutput:
-        r"""Returns the top `k` most semantically similar documents for a given query using cosine similarity.
 
-        Args:
-        query (str): The input textual query.
-        top_k (Optional[int]): The number of most similar results to extracts. Defaults to 10.
-        """
-        query_vector = self.model.encode([query])[0]
-        response = self.client.query_points(
-            collection_name=self.name,
-            query=query_vector,
-            limit=top_k,
-            with_vectors=False,
-        )
-
-        results: List[RetrievedPoint] = []
-        for point in response.points:
-            results.append(
-                RetrievedPoint(
-                    id=point.id,
-                    metadata=point.payload,
-                    score=point.score,
-                )
-            )
-
-        return SearchOutput(results=results)
     
-
-
-
-    def search_many(self, queries: list[str], top_k: int = 5, batch_size: int = 512) -> list[SearchOutput]:
+    def search(self, queries: list[str], top_k: int = 5, query_batch_size: int = 512, encode_batch_size:int =32 ) -> list[SearchOutput]:
         
-        vectors = self.model.encode(queries)
-        if not isinstance(vectors, list):
-            vectors = vectors.tolist()
+        queries = queries if isinstance(queries, list) else [queries]
+
+        vectors = self.model.encode(queries, batch_size= encode_batch_size)
 
         all_responses = []                       
-        for i in range(0, len(queries), batch_size):
-            vec_batch = vectors[i : i + batch_size]
+        for i in range(0, len(queries), query_batch_size):
+            vec_batch = vectors[i : i + query_batch_size]
 
             # requests parameters
             # per maggiore velocità di ricerca 
