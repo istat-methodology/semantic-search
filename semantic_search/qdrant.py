@@ -52,51 +52,71 @@ class EmbeddingModel:
             self.model = OpenAI(api_key=self.openai_api_key)
             self._assert_dimensions_openai(self.model_id, self.vector_size)
 
-    def encode(self, texts: List[str], batch_size: Optional[int] = 32) -> List[List[float]]:
+    def encode(
+        self, texts: List[str], batch_size: Optional[int] = 32
+    ) -> List[List[float]]:
         r"""Returns a list of embedding vectors for the given text inputs.
-        
+
         Args:
         texts (List[str]): List of text inputs to encode.
         batch_size (Optional[int]): Controls batch size for embedding generation. Defaults to 32.
         """
         if self.model_type == "huggingface":
-            embeddings = self.model.encode(texts, batch_size=batch_size, show_progress_bar=True)
-        
+            embeddings = self.model.encode(
+                texts, batch_size=batch_size, show_progress_bar=True
+            )
+
         elif self.model_type == "openai":
             if self.model_id == "text-embedding-ada-002":
-                embeddings = self._openai_batch_encode(texts, dimensions=None, batch_size=batch_size)
+                embeddings = self._openai_batch_encode(
+                    texts, dimensions=None, batch_size=batch_size
+                )
             else:
-                embeddings = self._openai_batch_encode(texts, dimensions=self.vector_size, batch_size=batch_size)
+                embeddings = self._openai_batch_encode(
+                    texts, dimensions=self.vector_size, batch_size=batch_size
+                )
 
         return embeddings
 
-    def _openai_batch_encode(self, texts: List[str], dimensions: int, batch_size: int) -> List[List[str]]:
+    def _openai_batch_encode(
+        self, texts: List[str], dimensions: int, batch_size: int
+    ) -> List[List[str]]:
         embeddings = []
         for i in tqdm(range(0, len(texts), batch_size), desc="Creating embeddings..."):
             batch = texts[i : i + batch_size]
             response = self.model.embeddings.create(
-                    input=batch,
-                    model=self.model_id,
-                    dimensions=dimensions
-                )
+                input=batch, model=self.model_id, dimensions=dimensions
+            )
             embeddings.extend([point.embedding for point in response.data])
         return embeddings
-    
+
     def _assert_dimensions_openai(self, model_id: str, vector_size: int):
         if model_id == "text-embedding-ada-002":
             if vector_size not in (None, 1536):
-                print("Warning: 'text-embedding-ada-002' model has a fixed dimension (1536), 'vector_size' will be set to 1536 when creating the database.")
+                print(
+                    "Warning: 'text-embedding-ada-002' model has a fixed dimension (1536), 'vector_size' will be set to 1536 when creating the database."
+                )
             self.vector_size = 1536
 
         else:
             if model_id == "text-embedding-3-small":
-                assert (type(vector_size) == int) and (vector_size % 8 == 0) and (8 <= vector_size <= 1536), "'vector_size' must be a multiple of 8 and in the range [8, 1536] for text-embedding-3-small."
-            
+                assert (
+                    (type(vector_size) == int)
+                    and (vector_size % 8 == 0)
+                    and (8 <= vector_size <= 1536)
+                ), "'vector_size' must be a multiple of 8 and in the range [8, 1536] for text-embedding-3-small."
+
             elif model_id == "text-embedding-3-large":
-                assert (type(vector_size) == int) and (vector_size % 8 == 0) and (8 <= vector_size <= 3072), "'vector_size' must be a multiple of 8 and in the range [8, 3072] for text-embedding-3-large."
-            
+                assert (
+                    (type(vector_size) == int)
+                    and (vector_size % 8 == 0)
+                    and (8 <= vector_size <= 3072)
+                ), "'vector_size' must be a multiple of 8 and in the range [8, 3072] for text-embedding-3-large."
+
             else:
-                raise ValueError(f"Unsupported model_id '{model_id}' for OpenAI embeddings.")
+                raise ValueError(
+                    f"Unsupported model_id '{model_id}' for OpenAI embeddings."
+                )
 
 
 # cambiato il refuso del nome: "CollectionMananger" -> "CollectionManager"
@@ -146,7 +166,9 @@ class CollectionManager:
             if overwrite:
                 self.client.delete_collection(name)
             else:
-                print(f"Collection '{name}' exists. To overwrite, set 'overwrite=True'.")
+                print(
+                    f"Collection '{name}' exists. To overwrite, set 'overwrite=True'."
+                )
                 return
 
         texts = [doc.content for doc in corpus.documents]
@@ -161,18 +183,15 @@ class CollectionManager:
                 doc = doc.copy()
                 doc.metadata["source_text"] = doc.content
 
-            point = PointStruct(
-                id=doc.id,
-                vector=embedding,
-                payload=doc.metadata
-            )
+            point = PointStruct(id=doc.id, vector=embedding, payload=doc.metadata)
             points.append(point)
-        
+
         vectors_config = VectorParams(
-            size=embedding_model.vector_size,
-            distance=Distance.COSINE
+            size=embedding_model.vector_size, distance=Distance.COSINE
         )
-        self.client.create_collection(collection_name=name, vectors_config=vectors_config)
+        self.client.create_collection(
+            collection_name=name, vectors_config=vectors_config
+        )
 
         for i in tqdm(
             range(0, len(points), upload_batch_size),
@@ -192,7 +211,7 @@ class CollectionManager:
             print(f"Succesfully removed collection: {name}!")
         else:
             print(f"No collection named '{name}' exists to remove.")
-    
+
     def get_collection_info(self, name: str) -> dict:
         info = self.client.get_collection(collection_name=name)
         vp = info.config.params.vectors
@@ -203,18 +222,17 @@ class CollectionManager:
             "distance": vp.distance.value,
             "points_count": info.points_count,
         }
-    
-    def list_collections(self)-> list[str]:
+
+    def list_collections(self) -> list[str]:
         """Returns a list of collection names."""
-        return[ c.name for c in self.client.get_collections().collections ]
-    
+        return [c.name for c in self.client.get_collections().collections]
+
     def list_collections_with_info(self) -> list[dict]:
         """Returns a list of dicts, one per collection, containing status, vector size, distance, and points count."""
         info = []
         for name in self.list_collections():
             info.append(self.get_collection_info(name))
         return info
- 
 
 
 class SemanticSeeker:
@@ -258,33 +276,37 @@ class SemanticSeeker:
             collection_vector_size == self.model.vector_size
         ), f"The vector sizes of collection ({collection_vector_size}) and model ({self.model.vector_size}) do not match!"
 
+    def search(
+        self,
+        queries: list[str],
+        top_k: int = 5,
+        query_batch_size: int = 512,
+        encode_batch_size: int = 32,
+    ) -> list[SearchOutput]:
 
-    
-    def search(self, queries: list[str], top_k: int = 5, query_batch_size: int = 512, encode_batch_size:int =32 ) -> list[SearchOutput]:
-        
         queries = queries if isinstance(queries, list) else [queries]
 
-        vectors = self.model.encode(queries, batch_size= encode_batch_size)
+        vectors = self.model.encode(queries, batch_size=encode_batch_size)
 
-        all_responses = []                       
+        all_responses = []
         for i in range(0, len(queries), query_batch_size):
             vec_batch = vectors[i : i + query_batch_size]
 
-            # requests parameters
-            # per maggiore velocità di ricerca 
-            # params = SearchParams(hnsw_ef=32)
-            # with less Payload no time-gain
-            reqs = [ models.QueryRequest(query=v, limit=top_k, with_vector=False, with_payload=True ) for v in vec_batch ]
+            reqs = [
+                models.QueryRequest(
+                    query=v, limit=top_k, with_vector=False, with_payload=True
+                )
+                for v in vec_batch
+            ]
 
             resp_batch = self.client.query_batch_points(
                 collection_name=self.name,
                 requests=reqs,
             )
-            all_responses.extend(resp_batch)   
+            all_responses.extend(resp_batch)
 
-        # conversione in SearchOutput 
         outputs: list[SearchOutput] = []
-        for res in all_responses:               
+        for res in all_responses:
             retrieved = [
                 RetrievedPoint(
                     id=p.id,
@@ -295,4 +317,4 @@ class SemanticSeeker:
             ]
             outputs.append(SearchOutput(results=retrieved))
 
-        return outputs    
+        return outputs
