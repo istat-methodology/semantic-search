@@ -58,7 +58,9 @@ class Corpus:
         assert len(df) > 0 and not df.empty, "DataFrame is empty."
 
         cols = list(OrderedDict.fromkeys([source_text_col] + cols_to_include))
-        assert all(col in df.columns for col in cols), "Not all columns were found in DataFrame."
+        assert all(
+            col in df.columns for col in cols
+        ), "Not all columns were found in DataFrame."
 
         doc_list: List[Document] = []
         for idx, row in df[cols].iterrows():
@@ -92,6 +94,33 @@ class SearchOutput:
         return self.results[index]
 
 
+@dataclass
+class EvaluationEntry:
+    r"""Evaluation result for a single query."""
+
+    y_true: Any
+    y_pred: List[Any]
+    scores: List[float]
+    is_correct: List[int]
+    rank: int
+
+
+@dataclass
+class EvaluationOutput:
+    r"""A list of `EvaluationEntry` objects."""
+
+    results: List[EvaluationEntry]
+
+    def __len__(self) -> int:
+        return len(self.results)
+
+    def __getitem__(self, index: int) -> EvaluationEntry:
+        return self.results[index]
+
+    def to_dicts(self) -> List[Dict]:
+        return [vars(result) for result in self.results]
+
+
 def build_corpus(
     texts: List[str],
     ids: Optional[List[int]] = None,
@@ -111,7 +140,9 @@ def build_corpus(
 
     assert len(np.unique(ids)) == len(ids), "IDs must be unique."
     assert all(isinstance(i, int) for i in ids), "All IDs must be integers."
-    assert (len(texts) == len(ids) == len(metadata)), "texts, ids, and metadata must be the same length."
+    assert (
+        len(texts) == len(ids) == len(metadata)
+    ), "texts, ids, and metadata must be the same length."
 
     docs = [Document(i, text, meta) for i, text, meta in zip(ids, texts, metadata)]
     return Corpus(docs)
