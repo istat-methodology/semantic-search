@@ -15,6 +15,28 @@ To install the `semantic_search` package, you can use pip:
 pip install git+https://github.com/istat-methodology/semantic-search.git
 ```
 
+## Local Development
+If you are working on the repository locally, from the project root you can set up a virtual environment and install the dependencies with:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Verification
+From the project root, run the test suite with:
+
+```bash
+python3 -m unittest tests.test_local tests.test_qdrant
+```
+
+You can also run a quick syntax check for the main modules and tests with:
+
+```bash
+python3 -m py_compile semantic_search/local.py semantic_search/qdrant.py tests/test_local.py tests/test_qdrant.py
+```
+
 ## Usage
 The `semantic_search` package provides two main functionalities: a **local** semantic search pipeline and a **qdrant-based** semantic search pipeline.
 
@@ -127,6 +149,8 @@ manager.create(
     vector_size=3072
 )
 ```
+
+The `create()` method also accepts `name="test-collection"` for backward compatibility, but `collection_name` is the preferred keyword.
 
 If you don't want to use OpenAI embedding models, you can use any other model supported by Hugging Face's `sentence-transformers` library, specifying the `model_id` accordingly and setting `model_type` to `"huggingface"`.
 

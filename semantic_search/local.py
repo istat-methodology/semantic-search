@@ -86,12 +86,13 @@ class LocalKnowledgeBase:
         batch_size (Optional[int]): Optional override of batch size. If not specified, it will use the `LocalKnowledgeBase` batch size.
         """
         top_k = min(top_k, len(self.ids))
-        batch_size = batch_size or self.batch_size
+        if batch_size is None:
+            batch_size = self.batch_size
         queries = queries if isinstance(queries, list) else [queries]
 
         query_embeddings = self.model.encode(
             queries,
-            batch_size=self.batch_size,
+            batch_size=batch_size,
             show_progress_bar=True,
             convert_to_tensor=True,
         )

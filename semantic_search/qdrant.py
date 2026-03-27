@@ -99,7 +99,7 @@ class EmbeddingModel:
 
 
 
-class CollectionMananger:
+class CollectionManager:
     r"""Handles the creation and deletion of Qdrant collections.
 
     Args:
@@ -118,11 +118,12 @@ class CollectionMananger:
 
     def create(
         self,
-        name: str,
         corpus: Corpus,
         model_id: str,
         model_type: str,
+        collection_name: Optional[str] = None,
         vector_size: Optional[int] = None,
+        name: Optional[str] = None,
         overwrite: Optional[bool] = False,
         upload_source_text: Optional[bool] = True,
         embed_batch_size: Optional[int] = 32,
@@ -131,21 +132,27 @@ class CollectionMananger:
         r"""Creates a Qdrant collection and uploads embedded documents using using cosine similarity as a distance metric.
 
         Args:
-        name (str): Collection name.
+        name (Optional[str]): Collection name. Kept for backward compatibility.
+        collection_name (Optional[str]): Collection name. Preferred argument name.
         corpus (Corpus): `Corpus` of documents to store.
         model_id (str): Name of the embedding model (e.g., 'all-MiniLM-L6-v2', 'text-embedding-3-large').
         model_type (str): Either 'huggingface' or 'openai'.
         vector_size (Optional[int]): Required for OpenAI models. Optional for HuggingFace models (auto-inferred).
         overwrite (Optional[bool]): If `True`, deletes existing collection with the same name before creation. Defaults to `False`.
         upload_source_text (Optional[bool]): If `True`, adds the original text to the document metadata. Defaults to `True`.
-        embed_batch_size (Optional[int]): Controls batch size for embedding generation. Defaults to 256.
+        embed_batch_size (Optional[int]): Controls batch size for embedding generation. Defaults to 32.
         upload_batch_size (Optional[int]): Controls batch upload size to Qdrant. Defaults to 32.
         """
-        if self.client.collection_exists(name):
+        if collection_name is None:
+            collection_name = name
+        if collection_name is None:
+            raise ValueError("You must provide either 'collection_name' or 'name'.")
+
+        if self.client.collection_exists(collection_name):
             if overwrite:
-                self.client.delete_collection(name)
+                self.client.delete_collection(collection_name)
             else:
-                print(f"Collection '{name}' exists. To overwrite, set 'overwrite=True'.")
+                print(f"Collection '{collection_name}' exists. To overwrite, set 'overwrite=True'.")
                 return
 
         texts = [doc.content for doc in corpus.documents]
@@ -171,14 +178,14 @@ class CollectionMananger:
             size=embedding_model.vector_size,
             distance=Distance.COSINE
         )
-        self.client.create_collection(collection_name=name, vectors_config=vectors_config)
+        self.client.create_collection(collection_name=collection_name, vectors_config=vectors_config)
 
         for i in tqdm(
             range(0, len(points), upload_batch_size),
-            desc=f"Uploading batches to {name}",
+            desc=f"Uploading batches to {collection_name}",
         ):
             batch = points[i : i + upload_batch_size]
-            self.client.upsert(collection_name=name, points=batch)
+            self.client.upsert(collection_name=collection_name, points=batch)
 
     def delete(self, name):
         r"""Deletes the specified collection, if it exists.
@@ -283,3 +290,7 @@ class SemanticSeeker:
             )
 
         return SearchOutput(results=results)
+
+
+# Backward-compatible alias for the original misspelled class name.
+CollectionMananger = CollectionManager
