@@ -12,16 +12,29 @@ class LocalKnowledgeBase:
     corpus (Corpus): The initial `Corpus` of documents.
     model_id (str): SentenceTransformer model ID (e.g., 'all-MiniLM-L6-v2').
     batch_size (Optional[int]): Embedding batch size. Defaults to 32.
+    trust_remote_code (Optional[bool]): Whether to allow custom model code from the Hub. Defaults to False.
     """
 
-    def __init__(self, corpus: Corpus, model_id: str, batch_size: Optional[int] = 32, keep_source_text: Optional[bool] = True):
+    def __init__(
+        self,
+        corpus: Corpus,
+        model_id: str,
+        batch_size: Optional[int] = 32,
+        keep_source_text: Optional[bool] = True,
+        trust_remote_code: Optional[bool] = False,
+    ):
         self.corpus = corpus
         self.model_id = model_id
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.batch_size = batch_size
         self.keep_source_text = keep_source_text
+        self.trust_remote_code = trust_remote_code
 
-        self.model = SentenceTransformer(model_id, device=self.device)
+        self.model = SentenceTransformer(
+            model_id,
+            device=self.device,
+            trust_remote_code=self.trust_remote_code,
+        )
         self.vector_size = self.model.get_sentence_embedding_dimension()
 
         self._init_storage(corpus)

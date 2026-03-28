@@ -73,6 +73,16 @@ base = LocalKnowledgeBase(
 ```
 We could also specify the `batch_size` argument to control how many texts are processed at once, which can be useful for large datasets, especially if you have a CUDA-compatible GPU. The default value is 32.
 
+Some SentenceTransformers models require `trust_remote_code=True` to load custom code from the Hugging Face Hub. The `LocalKnowledgeBase` constructor exposes the same option and keeps it disabled by default:
+
+```python
+base = LocalKnowledgeBase(
+    corpus=corpus,
+    model_id="Alibaba-NLP/gte-multilingual-base",
+    trust_remote_code=True,
+)
+```
+
 #### Semantic Search
 Now we can perform semantic search using the `.search()` method of the `LocalKnowledgeBase` object. This method takes a query string (or list of strings) and returns the most relevant texts from the corpus based on their embeddings. The `top_k` argument specifies how many results to return.
 

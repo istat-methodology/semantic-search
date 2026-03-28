@@ -53,9 +53,10 @@ class FakeSimMatrix:
 class FakeSentenceTransformer:
     instances = []
 
-    def __init__(self, model_id, device=None):
+    def __init__(self, model_id, device=None, trust_remote_code=False):
         self.model_id = model_id
         self.device = device
+        self.trust_remote_code = trust_remote_code
         self.calls = []
         type(self).instances.append(self)
 
@@ -124,6 +125,44 @@ class LocalKnowledgeBaseBatchSizeTest(unittest.TestCase):
             model = FakeSentenceTransformer.instances[0]
             self.assertEqual(model.calls[0]["batch_size"], 32)
             self.assertEqual(model.calls[1]["batch_size"], 7)
+
+    def test_init_uses_default_trust_remote_code_false(self):
+        fake_modules = install_fake_dependencies()
+
+        with patch.dict(sys.modules, fake_modules):
+            sys.modules.pop("semantic_search.local", None)
+            local = importlib.import_module("semantic_search.local")
+            data = importlib.import_module("semantic_search.data")
+
+            corpus = data.build_corpus(texts=["alpha"], ids=[1])
+            local.LocalKnowledgeBase(
+                corpus=corpus,
+                model_id="fake-model",
+            )
+
+            self.assertEqual(len(FakeSentenceTransformer.instances), 1)
+            model = FakeSentenceTransformer.instances[0]
+            self.assertFalse(model.trust_remote_code)
+
+    def test_init_passes_trust_remote_code_when_enabled(self):
+        fake_modules = install_fake_dependencies()
+
+        with patch.dict(sys.modules, fake_modules):
+            sys.modules.pop("semantic_search.local", None)
+            local = importlib.import_module("semantic_search.local")
+            data = importlib.import_module("semantic_search.data")
+
+            corpus = data.build_corpus(texts=["alpha"], ids=[1])
+            base = local.LocalKnowledgeBase(
+                corpus=corpus,
+                model_id="fake-model",
+                trust_remote_code=True,
+            )
+
+            self.assertTrue(base.trust_remote_code)
+            self.assertEqual(len(FakeSentenceTransformer.instances), 1)
+            model = FakeSentenceTransformer.instances[0]
+            self.assertTrue(model.trust_remote_code)
 
 
 if __name__ == "__main__":
